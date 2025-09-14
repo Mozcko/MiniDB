@@ -1,0 +1,12 @@
+# Archivos compilados
+bin/
+build/
+
+# Archivos de librerías
+lib/
+
+# Otros archivos (dependiendo del editor o SO)
+*.swo
+*.swp
+*~
+.DS_Store
