@@ -1,0 +1,6 @@
+[TABLE:estudiantes]
+id,nombre,carrera
+1,Maria,Sistemas
+2,Jose,Derecho
+3,Sofia,Medicina
+[END_TABLE]
