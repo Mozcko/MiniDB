@@ -1,12 +1,11 @@
-// src/Database.cpp
 #include "MiniDB/Database.hpp"
-#include <iostream> // Solo para mensajes de error si quieres
+#include <iostream> 
 
 void Database::set(const std::string& key, const std::string& value) {
     // Por ahora, una simple búsqueda lineal
     for (auto& pair : storage) {
         if (pair.first == key) {
-            pair.second = value; // Actualiza si la clave ya existe
+            pair.second = value;
             return;
         }
     }
@@ -20,5 +19,5 @@ std::string Database::get(const std::string& key) {
             return pair.second;
         }
     }
-    return "Key not found"; // Opcional: manejar el error de otra forma
+    return "Key not found"; 
 }
