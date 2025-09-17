@@ -1,6 +1,7 @@
 #include "MiniDB/Database.hpp"
 #include <fstream>
 #include <iostream>
+#include "MiniDB/Parser.hpp"
 #include <sstream>
 
 // El constructor carga la base de datos al ser creado
@@ -44,6 +45,26 @@ std::optional<Table> Database::selectFrom(const std::string& tableName)
     return std::nullopt;
 }
 
+void Database::executeScript(const std::string& scriptContent) {
+    Parser parser;
+    std::stringstream scriptStream(scriptContent);
+    std::string commandText;
+
+    // Separa el script por punto y coma
+    while (std::getline(scriptStream, commandText, ';')) {
+        // Ignorar líneas vacías o solo con espacios
+        if (commandText.find_first_not_of(" \t\n\r") == std::string::npos) {
+            continue;
+        }
+
+        Command command = parser.parse(commandText);
+        if (command.type != CommandType::UNRECOGNIZED) {
+            std::cout << "minidb> " << commandText << ";" << std::endl;
+            execute(command);
+        }
+    }
+}
+
 void Database::execute(const Command& command) {
     switch (command.type) {
         case CommandType::CREATE_TABLE: {
@@ -81,16 +102,42 @@ void Database::execute(const Command& command) {
                 std::cout << "Error: La tabla '" << command.tableName << "' no existe.\n";
                 return;
             }
-            // Por ahora, ignora las columnas específicas y hace SELECT *
-            for (const auto& col : tableOpt->getColumns()) {
+
+            const auto& table = *tableOpt;
+            std::vector<std::string> colsToPrint;
+
+            if (command.columns.size() == 1 && command.columns[0] == "*") {
+                colsToPrint = table.getColumns();
+            } else {
+                colsToPrint = command.columns;
+            }
+
+            // Imprimir cabecera
+            for (const auto& col : colsToPrint) {
                 std::cout << col << "\t";
             }
             std::cout << "\n---------------------------------\n";
-            for (const auto& row : tableOpt->getRows()) {
-                for (const auto& col : tableOpt->getColumns()) {
-                    std::cout << row.at(col) << "\t";
+
+            // Imprimir filas
+            for (const auto& row : table.getRows()) {
+                bool printRow = true;
+                if (command.whereClause) {
+                    const auto& wc = *command.whereClause;
+                    auto it = row.find(wc.column);
+                    if (it == row.end() || it->second != wc.value) {
+                        printRow = false;
+                    }
                 }
-                std::cout << "\n";
+
+                if (printRow) {
+                    for (const auto& col : colsToPrint) {
+                        auto it = row.find(col);
+                        if (it != row.end()) {
+                            std::cout << it->second << "\t";
+                        }
+                    }
+                    std::cout << "\n";
+                }
             }
             break;
         }

@@ -4,3 +4,8 @@ id,nombre,carrera
 2,Jose,Derecho
 3,Sofia,Medicina
 [END_TABLE]
+[TABLE:productos]
+id,nombre,precio
+1,Laptop,1200
+2,Mouse,25
+[END_TABLE]

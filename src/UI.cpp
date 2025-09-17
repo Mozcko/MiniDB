@@ -1,5 +1,6 @@
 #include "MiniDB/UI.hpp"
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <vector>
 
@@ -12,8 +13,9 @@ void UI::displayMenu()
     std::cout << "2. Insertar Fila (Guiado)\n";
     std::cout << "3. Seleccionar Datos (Guiado)\n";
     std::cout << "4. Ejecutar Consulta (SQL)\n";
-    std::cout << "5. Ayuda\n";
-    std::cout << "6. Salir\n";
+    std::cout << "5. Ejecutar Script SQL desde Archivo\n";
+    std::cout << "6. Ayuda\n";
+    std::cout << "7. Salir\n";
     std::cout << "-------------------\n";
 }
 
@@ -92,7 +94,29 @@ void UI::handleSelect()
 void UI::handleExecuteQuery() {
     std::cout << "minidb> ";
     std::string query;
-    std::getline(std::cin, query);
+    if (!std::getline(std::cin, query) || query.empty()) {
+        return;
+    }
+    executeQuery(query);
+}
+
+void UI::handleExecuteScript() {
+    std::cout << "Ruta del archivo SQL: ";
+    std::string filePath;
+    std::getline(std::cin, filePath);
+
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        std::cout << "Error: No se pudo abrir el archivo '" << filePath << "'.\n";
+        return;
+    }
+
+    std::string scriptContent((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    db.executeScript(scriptContent);
+    std::cout << "Script '" << filePath << "' ejecutado.\n";
+}
+
+void UI::executeQuery(const std::string& query) {
     Command command = parser.parse(query);
     db.execute(command);
 }
@@ -120,9 +144,10 @@ void UI::run()
         if (choice == "1") handleCreateTable();
         else if (choice == "2") handleInsert();
         else if (choice == "3") handleSelect();
-        else if (choice == "4") handleExecuteQuery();
-        else if (choice == "5") handleHelp();
-        else if (choice == "6") break;
+        else if (choice == "4") handleExecuteQuery(); // Modo interactivo
+        else if (choice == "5") handleExecuteScript();
+        else if (choice == "6") handleHelp();
+        else if (choice == "7") break;
         else std::cout << "Opción no válida. Por favor, intenta de nuevo.\n";
     }
 }

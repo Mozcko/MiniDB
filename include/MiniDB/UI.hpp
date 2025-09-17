@@ -15,7 +15,9 @@ private:
     void handleCreateTable();
     void handleInsert();
     void handleSelect();
-    void handleExecuteQuery();
+    void handleExecuteQuery(); // Para una sola línea
+    void handleExecuteScript(); // Para un archivo
+    void executeQuery(const std::string& query); // Lógica común
     void handleHelp();
 
     Database db;

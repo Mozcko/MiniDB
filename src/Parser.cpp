@@ -3,13 +3,14 @@
 #include <algorithm>
 
 // Función auxiliar para dividir un string en tokens
-std::vector<std::string> tokenize(const std::string& query) {
-    std::stringstream ss(query);
+std::vector<std::string> tokenize(const std::string& singleCommand) {
+    std::stringstream ss(singleCommand);
     std::string token;
     std::vector<std::string> tokens;
     while (ss >> token) {
         // Eliminar punto y coma final si existe
-        if (token.back() == ';') {
+        // Pero lo dejamos por si se usa en modo interactivo con punto y coma.
+        if (!token.empty() && token.back() == ';') {
             token.pop_back();
         }
         tokens.push_back(token);
@@ -33,21 +34,33 @@ std::vector<std::string> parseParenthesizedList(const std::string& listStr) {
 }
 
 Command Parser::parse(const std::string& query) {
-    auto tokens = tokenize(query);
-    if (tokens.empty()) {
-        return Command{CommandType::UNRECOGNIZED};
+    // Esta función ahora actúa como un despachador para la primera consulta.
+    // La lógica de múltiples comandos se manejará en la UI o en un nivel superior.
+    // Por simplicidad, aquí procesaremos la primera instrucción que encontremos.
+    std::string firstCommand;
+    size_t semi_pos = query.find(';');
+    if (semi_pos != std::string::npos) {
+        firstCommand = query.substr(0, semi_pos);
+    } else {
+        firstCommand = query;
     }
+
+    // Limpiar espacios en blanco al inicio/final
+    firstCommand.erase(0, firstCommand.find_first_not_of(" \t\n\r"));
+    firstCommand.erase(firstCommand.find_last_not_of(" \t\n\r") + 1);
+
+    auto tokens = tokenize(firstCommand);
+    if (tokens.empty()) return Command{CommandType::UNRECOGNIZED};
 
     if (tokens[0] == "CREATE" && tokens.size() > 2 && tokens[1] == "TABLE") {
         return parseCreate(tokens);
     }
-    if (tokens[0] == "INSERT" && tokens.size() > 3 && tokens[1] == "INTO") {
+    if (tokens[0] == "INSERT" && tokens.size() > 2 && tokens[1] == "INTO") {
         return parseInsert(tokens);
     }
     if (tokens[0] == "SELECT" && tokens.size() > 2) {
         return parseSelect(tokens);
     }
-
     return Command{CommandType::UNRECOGNIZED};
 }
 
@@ -86,18 +99,20 @@ Command Parser::parseInsert(std::vector<std::string>& tokens) {
 Command Parser::parseSelect(std::vector<std::string>& tokens) {
     // SELECT * FROM table_name
     // SELECT col1,col2 FROM table_name
-    if (tokens.size() < 4 || tokens[tokens.size() - 2] != "FROM") {
+    // SELECT * FROM table_name WHERE col = value
+    // SELECT col1,col2 FROM table_name WHERE col = value
+    auto fromIt = std::find(tokens.begin(), tokens.end(), "FROM");
+    if (fromIt == tokens.end() || fromIt + 1 == tokens.end()) {
         return Command{CommandType::UNRECOGNIZED};
     }
 
     Command cmd;
     cmd.type = CommandType::SELECT;
-    cmd.tableName = tokens.back();
 
-    // Juntar las columnas en un solo string
+    // Columnas
     std::string columnStr;
-    for(size_t i = 1; i < tokens.size() - 2; ++i) {
-        columnStr += tokens[i];
+    for (auto it = tokens.begin() + 1; it != fromIt; ++it) {
+        columnStr += *it;
     }
 
     std::stringstream ss(columnStr);
@@ -105,5 +120,23 @@ Command Parser::parseSelect(std::vector<std::string>& tokens) {
     while(std::getline(ss, col, ',')) {
         cmd.columns.push_back(col);
     }
+
+    // Tabla y cláusula WHERE
+    auto whereIt = std::find(fromIt, tokens.end(), "WHERE");
+    if (whereIt == tokens.end()) { // No hay WHERE
+        if (fromIt + 1 >= tokens.end()) return Command{CommandType::UNRECOGNIZED};
+        cmd.tableName = *(fromIt + 1);
+        if (fromIt + 2 != tokens.end()) return Command{CommandType::UNRECOGNIZED}; // Tokens extra
+    } else { // Hay WHERE
+        if (fromIt + 1 >= whereIt) return Command{CommandType::UNRECOGNIZED}; // No hay nombre de tabla
+        cmd.tableName = *(fromIt + 1);
+
+        // WHERE col = val (espera 4 tokens: WHERE, col, =, val)
+        if (std::distance(whereIt, tokens.end()) != 4 || *(whereIt + 2) != "=") {
+            return Command{CommandType::UNRECOGNIZED};
+        }
+        cmd.whereClause = WhereClause{*(whereIt + 1), *(whereIt + 3)};
+    }
+
     return cmd;
 }

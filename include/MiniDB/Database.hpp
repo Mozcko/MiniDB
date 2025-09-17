@@ -17,6 +17,7 @@ public:
   bool insertInto(const std::string& tableName, const Row& row);
   std::optional<Table> selectFrom(const std::string& tableName);
   void execute(const Command& command);
+  void executeScript(const std::string& scriptContent);
 
 private:
   void load(); // Carga la BD desde el archivo
