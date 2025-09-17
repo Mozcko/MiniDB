@@ -23,24 +23,18 @@ void UI::handleCreateTable()
 {
     std::string tableName, column_str;
     std::cout << "Nombre de la tabla: ";
-    std::getline(std::cin, tableName);
-    std::cout << "Columnas (separadas por coma, ej: id,nombre,email): ";
+    std::getline(std::cin, tableName); // "usuarios"
+    std::cout << "Columnas (ej: id INTEGER, nombre TEXT): ";
     std::getline(std::cin, column_str);
     
-    std::vector<std::string> columns;
-    std::stringstream ss(column_str);
-    std::string column;
-    while(std::getline(ss, column, ',')) {
-        columns.push_back(column);
-    }
-    
-    db.createTable(tableName, columns);
-    std::cout << "Comando 'CREATE TABLE' ejecutado.\n";
+    // Construir una consulta SQL y dejar que el parser y el ejecutor hagan el trabajo
+    std::string query = "CREATE TABLE " + tableName + " (" + column_str + ");";
+    executeQuery(query);
 }
 
 void UI::handleInsert()
 {
-    std::string tableName;
+    std::string tableName, values_str;
     std::cout << "Nombre de la tabla: ";
     std::getline(std::cin, tableName);
 
@@ -49,20 +43,12 @@ void UI::handleInsert()
         std::cout << "Error: La tabla '" << tableName << "' no existe.\n";
         return;
     }
+    
+    std::cout << "Valores (separados por coma, ej: 1,Juan): ";
+    std::getline(std::cin, values_str);
 
-    Row row;
-    for (const auto& col : tableOpt->getColumns()) {
-        std::cout << col << ": ";
-        std::string value;
-        std::getline(std::cin, value);
-        row[col] = value;
-    }
-
-    if (db.insertInto(tableName, row)) {
-        std::cout << "Fila insertada.\n";
-    } else {
-        std::cout << "Error al insertar la fila.\n";
-    }
+    std::string query = "INSERT INTO " + tableName + " VALUES (" + values_str + ");";
+    executeQuery(query);
 }
 
 void UI::handleSelect()
@@ -71,24 +57,8 @@ void UI::handleSelect()
     std::cout << "Nombre de la tabla: ";
     std::getline(std::cin, tableName);
 
-    auto tableOpt = db.selectFrom(tableName);
-    if (!tableOpt) {
-        std::cout << "Error: La tabla '" << tableName << "' no existe.\n";
-        return;
-    }
-
-    const auto& table = *tableOpt;
-    for (const auto& col : table.getColumns()) {
-        std::cout << col << "\t";
-    }
-    std::cout << "\n---------------------------------\n";
-
-    for (const auto& row : table.getRows()) {
-        for (const auto& col : table.getColumns()) {
-            std::cout << row.at(col) << "\t";
-        }
-        std::cout << "\n";
-    }
+    std::string query = "SELECT * FROM " + tableName + ";";
+    executeQuery(query);
 }
 
 void UI::handleExecuteQuery() {

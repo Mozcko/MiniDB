@@ -24,32 +24,39 @@ std::vector<std::string> parseParenthesizedList(const std::string& listStr) {
     // Eliminar paréntesis
     std::string content = listStr.substr(1, listStr.size() - 2);
     std::stringstream ss(content);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        // Quitar espacios en blanco
-        item.erase(std::remove_if(item.begin(), item.end(), isspace), item.end());
-        items.push_back(item);
+    std::string segment;
+
+    while (std::getline(ss, segment, ',')) {
+        bool in_string = false;
+        if (!items.empty()) {
+            const auto& last_item = items.back();
+            if (!last_item.empty() && last_item.front() == '\'' && (last_item.back() != '\'' || last_item.length() == 1)) {
+                in_string = true;
+            }
+        }
+
+        if (in_string) {
+            items.back() += "," + segment;
+        } else {
+            // Limpiar espacios en blanco
+            size_t first = segment.find_first_not_of(" \t");
+            if (std::string::npos != first) {
+                segment = segment.substr(first);
+            }
+            items.push_back(segment);
+        }
     }
     return items;
 }
 
 Command Parser::parse(const std::string& query) {
-    // Esta función ahora actúa como un despachador para la primera consulta.
-    // La lógica de múltiples comandos se manejará en la UI o en un nivel superior.
-    // Por simplicidad, aquí procesaremos la primera instrucción que encontremos.
-    std::string firstCommand;
-    size_t semi_pos = query.find(';');
-    if (semi_pos != std::string::npos) {
-        firstCommand = query.substr(0, semi_pos);
-    } else {
-        firstCommand = query;
-    }
+    std::string commandStr = query;
 
     // Limpiar espacios en blanco al inicio/final
-    firstCommand.erase(0, firstCommand.find_first_not_of(" \t\n\r"));
-    firstCommand.erase(firstCommand.find_last_not_of(" \t\n\r") + 1);
+    commandStr.erase(0, commandStr.find_first_not_of(" \t\n\r"));
+    commandStr.erase(commandStr.find_last_not_of(" \t\n\r") + 1);
 
-    auto tokens = tokenize(firstCommand);
+    auto tokens = tokenize(commandStr);
     if (tokens.empty()) return Command{CommandType::UNRECOGNIZED};
 
     if (tokens[0] == "CREATE" && tokens.size() > 2 && tokens[1] == "TABLE") {
@@ -66,29 +73,61 @@ Command Parser::parse(const std::string& query) {
 
 Command Parser::parseCreate(std::vector<std::string>& tokens) {
     // CREATE TABLE table_name (col1,col2,...)
-    if (tokens.size() != 4) return Command{CommandType::UNRECOGNIZED};
+    if (tokens.size() < 4) return Command{CommandType::UNRECOGNIZED};
     
     Command cmd;
     cmd.type = CommandType::CREATE_TABLE;
     cmd.tableName = tokens[2];
     
-    std::string columnList = tokens[3];
+    // Juntar el resto de los tokens para formar la lista de columnas
+    std::string columnList;
+    for (size_t i = 3; i < tokens.size(); ++i) {
+        columnList += tokens[i] + " ";
+    }
+    // Quitar el último espacio extra
+    if (!columnList.empty()) columnList.pop_back();
+
     if (columnList.front() != '(' || columnList.back() != ')') {
         return Command{CommandType::UNRECOGNIZED};
     }
-    cmd.columns = parseParenthesizedList(columnList);
+
+    auto columnDefs = parseParenthesizedList(columnList);
+    for (const auto& def : columnDefs) {
+        std::stringstream def_ss(def);
+        std::string name, typeStr;
+        def_ss >> name >> typeStr;
+
+        if (name.empty() || typeStr.empty()) return Command{CommandType::UNRECOGNIZED};
+
+        DataType type;
+        if (typeStr == "INTEGER") {
+            type = DataType::INTEGER;
+        } else if (typeStr == "TEXT") {
+            type = DataType::TEXT;
+        } else {
+            return Command{CommandType::UNRECOGNIZED}; // Tipo no soportado
+        }
+        cmd.columns.push_back({name, type});
+    }
     return cmd;
 }
 
 Command Parser::parseInsert(std::vector<std::string>& tokens) {
     // INSERT INTO table_name VALUES (val1,val2,...)
-    if (tokens.size() != 5 || tokens[3] != "VALUES") return Command{CommandType::UNRECOGNIZED};
+    if (tokens.size() < 5 || tokens[3] != "VALUES") return Command{CommandType::UNRECOGNIZED};
 
     Command cmd;
     cmd.type = CommandType::INSERT;
     cmd.tableName = tokens[2];
 
-    std::string valueList = tokens[4];
+    // Juntar el resto de los tokens para formar la lista de valores
+    std::string valueList;
+    for (size_t i = 4; i < tokens.size(); ++i) {
+        valueList += tokens[i] + " ";
+    }
+    // Quitar el último espacio extra
+    if (!valueList.empty()) valueList.pop_back();
+
     if (valueList.front() != '(' || valueList.back() != ')') {
         return Command{CommandType::UNRECOGNIZED};
     }
@@ -118,7 +157,7 @@ Command Parser::parseSelect(std::vector<std::string>& tokens) {
     std::stringstream ss(columnStr);
     std::string col;
     while(std::getline(ss, col, ',')) {
-        cmd.columns.push_back(col);
+        cmd.columnNames.push_back(col);
     }
 
     // Tabla y cláusula WHERE

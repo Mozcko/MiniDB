@@ -13,7 +13,7 @@ public:
   // El destructor se asegurará de guardar al final
   ~Database();
 
-  bool createTable(const std::string& tableName, const std::vector<std::string>& columns);
+  bool createTable(const std::string& tableName, const std::vector<Column>& columns);
   bool insertInto(const std::string& tableName, const Row& row);
   std::optional<Table> selectFrom(const std::string& tableName);
   void execute(const Command& command);
