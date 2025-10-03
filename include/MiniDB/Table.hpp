@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <optional>
 #include <variant>
+#include <functional>
 
 enum class DataType {
     INTEGER,
@@ -28,6 +29,8 @@ public:
     explicit Table(std::vector<Column> columns);
 
     bool insert(const Row& row);
+    int deleteRows(std::function<bool(const Row&)> condition);
+    int updateRows(std::function<bool(const Row&)> condition, std::function<void(Row&)> updateAction);
     const std::vector<Row>& getRows() const;
     const std::vector<Column>& getColumns() const;
 

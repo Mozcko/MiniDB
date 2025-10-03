@@ -1,8 +1,10 @@
-[TABLE:empleados]
-id INTEGER,puesto TEXT,salario INTEGER
-101,'Desarrollador',50000
-102,'Diseñador',45000
-103,'Gerente',70000
+[TABLE:usuarios]
+id INTEGER,nombre TEXT,edad INTEGER
+[END_TABLE]
+[TABLE:productos]
+id TEXT,nombre TEXT,precio TEXT
+1,Laptop,1200
+2,Mouse,25
 [END_TABLE]
 [TABLE:estudiantes]
 id TEXT,nombre TEXT,carrera TEXT
@@ -10,11 +12,15 @@ id TEXT,nombre TEXT,carrera TEXT
 2,Jose,Derecho
 3,Sofia,Medicina
 [END_TABLE]
-[TABLE:productos]
-id TEXT,nombre TEXT,precio TEXT
-1,Laptop,1200
-2,Mouse,25
+[TABLE:empleados]
+id INTEGER,puesto TEXT,salario INTEGER
+101,'Desarrollador',50000
+102,'Diseñador',45000
+103,'Gerente',70000
 [END_TABLE]
-[TABLE:usuarios]
-id INTEGER,nombre TEXT,edad INTEGER
+[TABLE:inventario]
+id INTEGER,producto TEXT,cantidad INTEGER
+1,'Laptop',12
+3,'Teclado',25
+4,'Monitor',15
 [END_TABLE]

@@ -4,6 +4,8 @@
 #include <variant>
 #include "MiniDB/Parser.hpp"
 #include <sstream>
+#include <algorithm>
+#include <iomanip>
 
 // El constructor carga la base de datos al ser creado
 Database::Database(const std::string &name) : db_name(name)
@@ -44,6 +46,38 @@ std::optional<Table> Database::selectFrom(const std::string& tableName)
         return it->second;
     }
     return std::nullopt;
+}
+
+bool checkCondition(const Row& row, const WhereClause& wc) {
+    auto it = row.find(wc.column);
+    if (it == row.end()) {
+        return false; // La columna no existe en la fila
+    }
+
+    try {
+        // Si la celda es INTEGER, comparamos numéricamente
+        if (std::holds_alternative<int>(it->second)) {
+            int cellValue = std::get<int>(it->second);
+            int conditionValue = std::stoi(wc.value);
+            if (wc.op == "=") return cellValue == conditionValue;
+            if (wc.op == ">") return cellValue > conditionValue;
+            if (wc.op == "<") return cellValue < conditionValue;
+            if (wc.op == ">=") return cellValue >= conditionValue;
+            if (wc.op == "<=") return cellValue <= conditionValue;
+            if (wc.op == "!=") return cellValue != conditionValue;
+        } else { // Si es TEXT, solo comparamos por igualdad/desigualdad
+            std::string cellValue = std::get<std::string>(it->second);
+            if (wc.op == "=") return cellValue == wc.value;
+            if (wc.op == "!=") return cellValue != wc.value;
+        }
+    } catch (const std::invalid_argument& e) {
+        // El valor de la condición no es un número para una comparación numérica
+        return false;
+    } catch (const std::out_of_range& e) {
+        return false;
+    }
+
+    return false; // Operador no soportado para el tipo de dato
 }
 
 void Database::executeScript(const std::string& scriptContent) {
@@ -142,47 +176,133 @@ void Database::execute(const Command& command) {
                 colsToPrint = command.columnNames;
             }
 
-            // Imprimir cabecera
-            for (const auto& col : colsToPrint) { // Ahora col es string
-                std::cout << col << "\t";
-            }
-            std::cout << "\n---------------------------------\n";
+            // --- Inicio de la nueva lógica de formato ---
 
-            // Imprimir filas
+            // 1. Recopilar las filas que se van a imprimir y calcular anchos
+            std::vector<Row> rowsToPrint;
+            std::unordered_map<std::string, size_t> colWidths;
+
+            // Inicializar anchos con la longitud de las cabeceras
+            for (const auto& colName : colsToPrint) {
+                colWidths[colName] = colName.length();
+            }
+
             for (const auto& row : table.getRows()) {
-                bool printRow = true;
-                if (command.whereClause) {
-                    const auto& wc = *command.whereClause;
-                    auto it = row.find(wc.column);
-                    if (it == row.end()) {
-                        printRow = false;
-                    } else {
-                        // Comparamos string con variant
-                        std::string cellValueStr;
-                        if (std::holds_alternative<int>(it->second)) {
-                            cellValueStr = std::to_string(std::get<int>(it->second));
-                        } else {
-                            cellValueStr = std::get<std::string>(it->second);
-                        }
-                        if (cellValueStr != wc.value) {
-                            printRow = false;
-                        }
-                    }
-                }
-
-                if (printRow) {
+                if (!command.whereClause || checkCondition(row, *command.whereClause)) {
+                    rowsToPrint.push_back(row);
+                    // Actualizar anchos máximos con los valores de la fila
                     for (const auto& colName : colsToPrint) {
-                        auto it = row.find(colName);
-                        if (it != row.end()) {
-                            // Imprimir el valor del variant
-                            std::visit([](auto&& arg){
-                                std::cout << arg << "\t";
-                            }, it->second);
+                        auto cellIt = row.find(colName);
+                        if (cellIt != row.end()) {
+                            std::string cellStr = std::visit([](auto&& arg) {
+                                // Usar un ostringstream para convertir cualquier tipo a string
+                                std::ostringstream oss;
+                                oss << arg;
+                                return oss.str();
+                            }, cellIt->second);
+                            if (cellStr.length() > colWidths[colName]) {
+                                colWidths[colName] = cellStr.length();
+                            }
                         }
                     }
-                    std::cout << "\n";
                 }
             }
+
+            // 2. Imprimir la cabecera formateada
+            std::cout << "| ";
+            for (const auto& colName : colsToPrint) {
+                std::cout << std::left << std::setw(colWidths[colName]) << colName << " | ";
+            }
+            std::cout << "\n";
+            std::cout << "|";
+            for (const auto& colName : colsToPrint) {
+                std::cout << std::string(colWidths[colName] + 2, '-') << "|";
+            }
+            std::cout << "\n";
+
+            // 3. Imprimir las filas formateadas
+            for (const auto& row : rowsToPrint) {
+                std::cout << "| ";
+                for (const auto& colName : colsToPrint) {
+                    auto cellIt = row.find(colName);
+                    if (cellIt != row.end()) {
+                        std::visit([&](auto&& arg) {
+                            std::cout << std::left << std::setw(colWidths[colName]) << arg << " | ";
+                        }, cellIt->second);
+                    } else {
+                        std::cout << std::left << std::setw(colWidths[colName] + 3) << " | "; // Espacio para celda vacía
+                    }
+                }
+                std::cout << "\n";
+            }
+            // --- Fin de la nueva lógica de formato ---
+            break;
+        }
+        case CommandType::DELETE: {
+            auto it = tables.find(command.tableName);
+            if (it == tables.end()) {
+                std::cout << "Error: La tabla '" << command.tableName << "' no existe.\n";
+                return;
+            }
+
+            auto& table = it->second;
+            int rowsDeleted = table.deleteRows(
+                [&](const Row& row) {
+                    if (command.whereClause) {
+                        return checkCondition(row, *command.whereClause);
+                    }
+                    return true; // Borra todo si no hay WHERE
+                }
+            );
+            std::cout << rowsDeleted << " fila(s) eliminada(s).\n";
+            break;
+        }
+        case CommandType::UPDATE: {
+            auto it = tables.find(command.tableName);
+            if (it == tables.end()) {
+                std::cout << "Error: La tabla '" << command.tableName << "' no existe.\n";
+                return;
+            }
+
+            auto& table = it->second;
+            const auto& columns = table.getColumns();
+
+            int rowsUpdated = table.updateRows(
+                // Función de condición
+                [&](const Row& row) {
+                    if (command.whereClause) {
+                        return checkCondition(row, *command.whereClause);
+                    }
+                    return true; // Actualiza todo si no hay WHERE
+                },
+                // Función de actualización
+                [&](Row& row) {
+                    for (const auto& setClause : command.setClauses) {
+                        // Encontrar el tipo de la columna que se va a actualizar
+                        auto colIt = std::find_if(columns.begin(), columns.end(), 
+                            [&](const Column& c){ return c.name == setClause.column; });
+
+                        if (colIt != columns.end()) {
+                            try {
+                                if (colIt->type == DataType::INTEGER) {
+                                    row[setClause.column] = std::stoi(setClause.value);
+                                } else { // TEXT
+                                    row[setClause.column] = setClause.value;
+                                }
+                            } catch (const std::invalid_argument& e) {
+                                std::cout << "Error: Valor '" << setClause.value << "' no es válido para la columna '" << setClause.column << "' de tipo INTEGER.\n";
+                                // Podríamos detener la actualización aquí si un valor es inválido
+                            } catch (const std::out_of_range& e) {
+                                std::cout << "Error: Valor '" << setClause.value << "' fuera de rango para tipo INTEGER.\n";
+                            }
+                        } else {
+                             std::cout << "Error: La columna '" << setClause.column << "' no existe en la tabla.\n";
+                        }
+                    }
+                }
+            );
+
+            std::cout << rowsUpdated << " fila(s) actualizada(s).\n";
             break;
         }
         case CommandType::UNRECOGNIZED:

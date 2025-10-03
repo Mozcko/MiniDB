@@ -68,6 +68,12 @@ Command Parser::parse(const std::string& query) {
     if (tokens[0] == "SELECT" && tokens.size() > 2) {
         return parseSelect(tokens);
     }
+    if (tokens[0] == "DELETE" && tokens.size() > 2) {
+        return parseDelete(tokens);
+    }
+    if (tokens[0] == "UPDATE" && tokens.size() > 3) {
+        return parseUpdate(tokens);
+    }
     return Command{CommandType::UNRECOGNIZED};
 }
 
@@ -170,12 +176,65 @@ Command Parser::parseSelect(std::vector<std::string>& tokens) {
         if (fromIt + 1 >= whereIt) return Command{CommandType::UNRECOGNIZED}; // No hay nombre de tabla
         cmd.tableName = *(fromIt + 1);
 
-        // WHERE col = val (espera 4 tokens: WHERE, col, =, val)
-        if (std::distance(whereIt, tokens.end()) != 4 || *(whereIt + 2) != "=") {
+        // WHERE col op val (espera 4 tokens: WHERE, col, op, val)
+        if (std::distance(whereIt, tokens.end()) != 4) {
             return Command{CommandType::UNRECOGNIZED};
         }
-        cmd.whereClause = WhereClause{*(whereIt + 1), *(whereIt + 3)};
+        cmd.whereClause = WhereClause{*(whereIt + 1), *(whereIt + 2), *(whereIt + 3)};
     }
 
+    return cmd;
+}
+
+Command Parser::parseDelete(std::vector<std::string>& tokens) {
+    // DELETE FROM table_name WHERE col op val
+    if (tokens.size() < 3 || tokens[1] != "FROM") {
+        return Command{CommandType::UNRECOGNIZED};
+    }
+
+    Command cmd;
+    cmd.type = CommandType::DELETE;
+    cmd.tableName = tokens[2];
+
+    if (tokens.size() > 3) { // Hay cláusula WHERE
+        auto whereIt = std::find(tokens.begin() + 3, tokens.end(), "WHERE");
+        if (whereIt == tokens.end() || std::distance(whereIt, tokens.end()) != 4) {
+            return Command{CommandType::UNRECOGNIZED};
+        }
+        cmd.whereClause = WhereClause{*(whereIt + 1), *(whereIt + 2), *(whereIt + 3)};
+    }
+    // Nota: DELETE sin WHERE es válido, pero por seguridad podríamos requerirlo.
+    // Por ahora, lo permitimos.
+
+    return cmd;
+}
+
+Command Parser::parseUpdate(std::vector<std::string>& tokens) {
+    // UPDATE table_name SET col1 = val1, col2 = val2 WHERE col op val
+    auto setIt = std::find(tokens.begin(), tokens.end(), "SET");
+    if (setIt == tokens.end() || setIt == tokens.begin() + 1) {
+        return Command{CommandType::UNRECOGNIZED};
+    }
+
+    Command cmd;
+    cmd.type = CommandType::UPDATE;
+    cmd.tableName = tokens[1];
+
+    auto whereIt = std::find(setIt, tokens.end(), "WHERE");
+
+    // Parsear SET clauses
+    // Por simplicidad, solo parseamos una cláusula SET: SET col = val
+    if (std::distance(setIt, whereIt) != 4 || *(setIt + 2) != "=") {
+         return Command{CommandType::UNRECOGNIZED};
+    }
+    cmd.setClauses.push_back({*(setIt + 1), *(setIt + 3)});
+
+    // Parsear WHERE
+    if (whereIt != tokens.end()) {
+        if (std::distance(whereIt, tokens.end()) != 4) {
+            return Command{CommandType::UNRECOGNIZED};
+        }
+        cmd.whereClause = WhereClause{*(whereIt + 1), *(whereIt + 2), *(whereIt + 3)};
+    }
     return cmd;
 }
